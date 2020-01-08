@@ -37,6 +37,7 @@ func main() {
 		new(Monobank),
 		new(Privat),
 		new(Idea),
+		new(Vostok),
 	}
 
 	for _, bank := range banks {

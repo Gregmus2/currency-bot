@@ -4,19 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"strconv"
 )
 
-type MonoCurrency struct {
-	CurrencyA int `json:"currencyCodeA"`
-	CurrencyB int `json:"currencyCodeB"`
-	Date      int `json:"date"`
-	RateBuy   float32 `json:"rateBuy"`
-	RateSell  float32 `json:"rateSell"`
+type RatesReceiver interface {
+	GetRates() (float64, float64, error)
+	BankName() string
 }
 
 type Bot struct {
@@ -34,38 +29,26 @@ func main() {
 	cfg := loadConfiguration()
 	bot := NewBot(cfg)
 
-	res, err := http.Get("https://api.monobank.ua/bank/currency")
-	if err != nil {
-		bot.errorReport("Something wrong with fetching monobank api" + err.Error())
+	banks := []RatesReceiver{
+		new(Pivdeniy),
+		new(Monobank),
+		new(Privat),
 	}
 
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		bot.errorReport("Error on read response" + err.Error())
-	}
-
-	currencies := make([]MonoCurrency, 0)
-	err = json.Unmarshal(body, &currencies)
-	if err != nil {
-		bot.errorReport("Error json decode" + err.Error())
-	}
-
-	for _, currency := range currencies {
-		if currency.CurrencyA == cfg.Currency {
-			var msg tgbotapi.Chattable
-			if currency.RateSell >= 24 {
-				msg = bot.factory(fmt.Sprintf("FUCK, your deposite in ass %f", currency.RateSell))
-			} else {
-				msg = bot.factory(fmt.Sprintf("%f", currency.RateSell))
-			}
-			_, err = bot.api.Send(msg)
-			if err != nil {
-				bot.errorReport("Error send msg" + err.Error())
-			}
-
-			return
+	text := "<pre>"
+	for _, bank := range banks {
+		buy, sell, err := bank.GetRates()
+		bot.errorReport(err)
+		if err == nil {
+			text += fmt.Sprintf("%s:\t%.2f\t%.2f\n", bank.BankName(), buy, sell)
 		}
 	}
+	text += "</pre>"
+
+	msg := bot.factory(text)
+	msg.ParseMode = "html"
+	_, err := bot.api.Send(msg)
+	bot.errorReport(err)
 }
 
 func NewBot(cfg *Config) *Bot {
@@ -105,8 +88,12 @@ func loadConfiguration() *Config {
 	return config
 }
 
-func (b *Bot) errorReport(msg string) {
-	_, err := b.api.Send(b.factory(msg))
+func (b *Bot) errorReport(err error) {
+	if err == nil {
+		return
+	}
+
+	_, err = b.api.Send(b.factory(err.Error()))
 	if err != nil {
 		log.Fatal(err)
 	}

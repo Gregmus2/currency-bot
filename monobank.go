@@ -17,34 +17,39 @@ type monoCurrency struct {
 	RateSell  float64 `json:"rateSell"`
 }
 
-type Monobank byte
+type Monobank struct {
+	Receiver
+}
 
-func (m Monobank) GetRates() (float64, float64, error) {
+func (m *Monobank) GetRates() error {
 	res, err := http.Get("https://api.monobank.ua/bank/currency")
 	if err != nil {
-		return 0, 0, errors.Wrap(err, "Monobank API error")
+		return errors.Wrap(err, "Monobank API error")
 	}
 
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return 0, 0, errors.Wrap(err, "Error on read response")
+		return errors.Wrap(err, "Error on read response")
 	}
 
 	currencies := make([]monoCurrency, 0)
 	err = json.Unmarshal(body, &currencies)
 	if err != nil {
-		return 0, 0, errors.Wrap(err, "Json decode error")
+		return errors.Wrap(err, "Json decode error")
 	}
 
 	for _, currency := range currencies {
 		if currency.CurrencyA == USD {
-			return currency.RateBuy, currency.RateSell, nil
+			m.buy = currency.RateBuy
+			m.sell = currency.RateSell
+
+			return nil
 		}
 	}
 
-	return 0, 0, errors.New("monobank have no USD in response")
+	return errors.New("monobank have no USD in response")
 }
 
-func (m Monobank) BankName() string {
+func (m *Monobank) BankName() string {
 	return "Monobank"
 }

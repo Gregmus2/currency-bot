@@ -6,11 +6,14 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"log"
 	"os"
+	"sort"
 	"strconv"
 )
 
 type RatesReceiver interface {
-	GetRates() (float64, float64, error)
+	GetRates() error
+	Buy() float64
+	Sell() float64
 	BankName() string
 }
 
@@ -33,15 +36,21 @@ func main() {
 		new(Pivdeniy),
 		new(Monobank),
 		new(Privat),
+		new(Idea),
 	}
+
+	for _, bank := range banks {
+		err := bank.GetRates()
+		bot.errorReport(err)
+	}
+
+	sort.Slice(banks, func(i, j int) bool {
+		return banks[i].Sell() < banks[j].Sell()
+	})
 
 	text := "<pre>"
 	for _, bank := range banks {
-		buy, sell, err := bank.GetRates()
-		bot.errorReport(err)
-		if err == nil {
-			text += fmt.Sprintf("%s:\t%.2f\t%.2f\n", bank.BankName(), buy, sell)
-		}
+		text += fmt.Sprintf("%s:\t%.2f\t%.2f\n", bank.BankName(), bank.Buy(), bank.Sell())
 	}
 	text += "</pre>"
 
